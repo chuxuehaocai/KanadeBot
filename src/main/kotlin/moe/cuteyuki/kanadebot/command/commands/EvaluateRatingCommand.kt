@@ -41,11 +41,6 @@ class EvaluateRatingCommand : ICommand {
         val userId = event.sender.userId
         val rawMessage = event.message.trim()
 
-//        if (args.isEmpty()) {
-//            bot.replyGroupMsg(event, "❌ 用法：.b50 <水鱼用户名> 或 .b50锐评 <水鱼用户名>")
-//            return
-//        }
-
         // 判断是否为锐评模式
         val sharp = rawMessage.contains("看看实力")
 
