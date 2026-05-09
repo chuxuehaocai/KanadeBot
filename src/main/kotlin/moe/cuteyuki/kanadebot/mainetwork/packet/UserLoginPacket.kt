@@ -4,24 +4,7 @@ import com.alibaba.fastjson2.annotation.JSONField
 import moe.cuteyuki.kanadebot.mainetwork.IPacket
 
 /**
- * 用户登录请求包 (from api.py login)
- *
- * Python 原始代码:
- * ```
- * data = {
- *     "userId": user_id,
- *     "accessCode": "",
- *     "regionId": self.cfg["regionId"],
- *     "placeId": self.cfg["placeId"],
- *     "clientId": self.cfg["clientId"],
- *     "dateTime": ts - 600,
- *     "loginDateTime": ts,
- *     "isContinue": False,
- *     "genericFlag": 0,
- *     "token": token
- * }
- * return await self.call_api("UserLoginApi", client, data, user_id)
- * ```
+ * 用户登录请求包
  */
 data class UserLoginPacket(
     @JSONField(name = "userId")

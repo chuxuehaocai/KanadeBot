@@ -27,8 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * 修改舞里程 (MaiMile) 命令
  *
- * 从 main.py 移植「修改舞里程 (DX2025)」功能
- * 完整流程（完全参照 sdgbpack/main.py edit_point）：
+ * 完整流程：
  *   1. QR 认证 → 获取 userId & token
  *   2. UserLoginApi → 登录 (获取 loginId, loginDate)
  *   3. GetUserDataApi → 获取用户数据 (含 point, totalPoint)
@@ -143,7 +142,6 @@ class MaiMileCommand : ICommand {
 
     /**
      * 完整的修改舞里程流程（挂起版本）
-     * 完全参照 sdgbpack/main.py edit_point
      */
     private suspend fun completeMaiMileFlow(
         bot: Bot, qqUserId: Long, groupId: Long, messageId: Int,
@@ -210,7 +208,7 @@ class MaiMileCommand : ICommand {
                 extras = extras
             )
 
-            // ========== 5. UpsertUserAllApi（无延迟，完全参照 sdgbpack）==========
+            // ========== 5. UpsertUserAllApi ==========
             val upsertResultStr = callApiSuspend("UpsertUserAllApi", upsertRequest, targetUserId)
             val upsertResult = JSON.parseObject(upsertResultStr)
             val rc = upsertResult.getIntValue("returnCode")

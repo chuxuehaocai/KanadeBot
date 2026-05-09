@@ -71,7 +71,7 @@ object NetworkManager {
 
         Logger.log("URL:" + url + " Data:" + data, Logger.LogType.DEBUG)
 
-        // 重试机制 (from reverseMai/api.py - 2次重试)
+        // 重试机制 (最多2次重试)
         val maxRetries = 2
         var lastException: Exception? = null
 
@@ -124,7 +124,7 @@ object NetworkManager {
 
                 return String(decompressed, StandardCharsets.UTF_8)
             } catch (e: SocketTimeoutException) {
-                // 网络超时/连接失败 - 重试 (from reverseMai/api.py httpx.TimeoutException/ConnectError)
+                // 网络超时/连接失败 - 重试
                 lastException = e
                 if (attempt < maxRetries - 1) {
                     Logger.log(

@@ -4,20 +4,7 @@ import com.alibaba.fastjson2.annotation.JSONField
 import moe.cuteyuki.kanadebot.mainetwork.IPacket
 
 /**
- * 用户登出请求包 (from api.py logout)
- *
- * Python 原始代码:
- * ```
- * data = {
- *     "userId": user_id,
- *     "accessCode": "",
- *     "regionId": self.cfg["regionId"],
- *     "placeId": self.cfg["placeId"],
- *     "clientId": self.cfg["clientId"],
- *     "loginDateTime": login_date,
- *     "type": 1
- * }
- * ```
+ * 用户登出请求包
  */
 data class UserLogoutPacket(
     @JSONField(name = "userId")

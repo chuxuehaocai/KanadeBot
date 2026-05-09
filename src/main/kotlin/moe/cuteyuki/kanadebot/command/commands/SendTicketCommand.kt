@@ -27,8 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * 使用功能票（发票）命令
  *
- * 从 main.py 移植「使用功能票 (发票)」功能
- * 完整流程（完全参照 sdgbpack/main.py use_ticket）：
+ * 完整流程：
  *   1. QR 认证 → 获取 userId & token
  *   2. UserLoginApi → 登录 (获取 loginId, loginDate)
  *   3. GetUserDataApi → 获取用户数据 (playerRating)
@@ -136,7 +135,6 @@ class SendTicketCommand : ICommand {
 
     /**
      * 完整的功能票使用流程（挂起版本）
-     * 完全参照 sdgbpack/main.py use_ticket
      */
     private suspend fun completeTicketFlow(
         bot: Bot, qqUserId: Long, groupId: Long, messageId: Int,
@@ -180,7 +178,7 @@ class SendTicketCommand : ICommand {
             println("[SendTicketCommand] 功能票 (ID: $ticketId) 已发送")
 
             // ========== 5. 上传游玩记录（使用票）==========
-            // 构造 musicData（完全参照 sdgbpack/main.py use_ticket）
+            // 构造 musicData
             val musicData = mapOf<String, Any>(
                 "musicId" to 417,
                 "level" to 3,

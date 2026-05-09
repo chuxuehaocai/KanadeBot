@@ -98,7 +98,6 @@ class WhoamiCommand: ICommand {
 
     /**
      * 完整的 whoami 流程（挂起版本）
-     * mirrors main.py query_user_info + _session
      */
     private suspend fun completeWhoamiFlow(
         bot: Bot, qqUserId: Long, groupId: Long, messageId: Int,

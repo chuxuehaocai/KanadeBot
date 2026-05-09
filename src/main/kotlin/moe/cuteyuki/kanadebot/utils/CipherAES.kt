@@ -23,7 +23,6 @@ object CipherAES {
 
     /**
      * AES CBC PKCS#7 加密
-     * 完全参照 sdgbpack/config.py AESHandler.encrypt
      */
     @JvmStatic
     @Throws(Exception::class)
@@ -40,7 +39,6 @@ object CipherAES {
 
     /**
      * AES CBC PKCS#7 解密
-     * 完全参照 sdgbpack/config.py AESHandler.decrypt
      */
     @JvmStatic
     @Throws(Exception::class)

@@ -55,7 +55,7 @@ class UserTokenAndIDPacket
         val rawKey = chipId + timestamp + chimeSalt
         key = sha256(rawKey).uppercase()
 
-        // QR Token 截取最后 64 位 (from reverseMai/config.py)
+        // QR Token 截取最后 64 位
         qrCode = if (qrCodeToken.length > 64) {
             qrCodeToken.substring(qrCodeToken.length - 64)
         } else {
@@ -65,7 +65,6 @@ class UserTokenAndIDPacket
 
     fun execute(): Pair<Long, String> {
         val headers: MutableMap<String?, String?> = HashMap()
-        // from reverseMai/config.py qr_api headers
         headers["Contention"] = "Keep-Alive"
         headers["Host"] = "ai.sys-all.cn"
         headers["User-Agent"] = "WC_AIME_LIB"

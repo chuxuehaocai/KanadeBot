@@ -9,7 +9,6 @@ import java.time.format.DateTimeFormatter
 
 /**
  * 构建 MaiMai 各类 API 请求负载
- * (mirrors payload.py - 全面参考 sdgbpack)
  */
 object PayloadBuilder {
 
@@ -41,7 +40,6 @@ object PayloadBuilder {
         "isNewKaleidxScopeList" to ""
     )
 
-    // 完全参照 sdgbpack/config.py ITEM_KIND_MAP
     private val ITEM_KIND_MAP = mapOf(
         "frame" to 1, "title" to 2, "icon" to 3, "partner" to 4, "plate" to 5,
         "ticket" to 6, "character" to 7, "music" to 8, "musicMas" to 9,
@@ -61,7 +59,7 @@ object PayloadBuilder {
     }
 
     /**
-     * 计算成绩等级 (完全参照 sdgbpack/config.py calc_score_rank)
+     * 计算成绩等级
      */
     private fun calcScoreRank(achievement: Int): Int {
         return when {
@@ -94,7 +92,6 @@ object PayloadBuilder {
 
     /**
      * 生成功能票请求 (UpsertUserChargelogApi)
-     * mirrors payload.py generate_ticket_request
      */
     fun generateTicketRequest(
         userId: Long, ticketId: Int, loginDateTime: Any, cfg: Config, playerRating: Int = 0
@@ -131,7 +128,6 @@ object PayloadBuilder {
 
     /**
      * 生成游玩记录请求 (UploadUserPlaylogListApi)
-     * mirrors payload.py generate_playlog_request
      *
      * 重载：接受 userInfoList (7 elements)，自动取 index 0 的 userData
      */
@@ -145,7 +141,6 @@ object PayloadBuilder {
 
     /**
      * 生成游玩记录请求 (UploadUserPlaylogListApi)
-     * mirrors payload.py generate_playlog_request
      */
     fun generatePlaylogRequest(
         loginId: Long, musicData: Map<String, Any>, userDataJson: JSONObject,
@@ -252,7 +247,6 @@ object PayloadBuilder {
 
     /**
      * 构建 userData 字典
-     * mirrors payload.py build_user_data_dict
      */
     private fun buildUserDataDict(
         userDataJson: JSONObject, cfg: Config, loginDate: Any,
@@ -265,7 +259,6 @@ object PayloadBuilder {
 
         val point = pointOverride ?: ud.getIntValue("point")
         val totalPoint = totalPointOverride ?: ud.getIntValue("totalPoint")
-        // 完全参照 sdgbpack/payload.py: ud.get('selectMapId', 1)
         val selectMapId = selectMapIdOverride ?: ud.getIntValue("selectMapId").let { if (it == 0) 1 else it }
 
         val built = JSONObject()
@@ -357,7 +350,6 @@ object PayloadBuilder {
 
     /**
      * 构建 UpsertUserAll 内部结构
-     * mirrors payload.py _build_upsert_user_all
      */
     private fun buildUpsertUserAll(
         userDataJson: JSONObject, userExtendJson: JSONObject, userOptionJson: JSONObject,
@@ -392,7 +384,7 @@ object PayloadBuilder {
 
         val weekly = userMissionDataJson.getJSONObject("userWeeklyData") ?: JSONObject()
         val userWeekly = JSONObject()
-        // 完全参照 sdgbpack/payload.py: 保持原始类型 (int)
+        // 保持原始类型 (int)
         userWeekly["lastLoginWeek"] = weekly.getIntValue("lastLoginWeek")
         userWeekly["beforeLoginWeek"] = weekly.getIntValue("beforeLoginWeek")
         userWeekly["friendBonusFlag"] = weekly.getBooleanValue("friendBonusFlag")
@@ -426,7 +418,6 @@ object PayloadBuilder {
 
     /**
      * 构建基础 Upsert 请求
-     * mirrors payload.py build_base_upsert
      */
     fun buildBaseUpsert(
         userId: Long, loginId: Long, userInfoList: List<JSONObject>,
@@ -483,7 +474,6 @@ object PayloadBuilder {
 
     /**
      * 生成完整的 UpsertUserAll 请求 (包含 playlog 和 gamePlaylog)
-     * mirrors payload.py generate_user_all_request
      */
     fun generateUserAllRequest(
         loginId: Long, loginDate: Any, musicData: Map<String, Any>,
@@ -545,7 +535,6 @@ object PayloadBuilder {
 
     /**
      * 生成 userItem
-     * mirrors payload.py generate_user_item
      */
     fun generateUserItem(itemId: Int, itemKind: String, stock: Int = 1, isValid: Boolean = true): JSONObject {
         val item = JSONObject()
@@ -558,7 +547,6 @@ object PayloadBuilder {
 
     /**
      * 生成 userMap
-     * mirrors payload.py generate_user_map
      */
     fun generateUserMap(mapId: Int, distance: Int = 0, isLock: Boolean = false,
                         isClear: Boolean = false, isComplete: Boolean = false,
@@ -575,7 +563,6 @@ object PayloadBuilder {
 
     /**
      * 生成 userKaleidxScope
-     * mirrors payload.py generate_user_kaleidx_scope
      */
     fun generateUserKaleidxScope(gateId: Int, isGateFound: Boolean = true,
                                   isKeyFound: Boolean = true, isClear: Boolean = true,

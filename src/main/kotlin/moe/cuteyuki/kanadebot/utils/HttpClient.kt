@@ -30,7 +30,7 @@ object HttpClient {
     }
 
     /**
-     * POST 请求 (from reverseMai/api.py httpx.post)
+     * POST 请求
      *
      * @param urlStr   请求 URL
      * @param headers  请求头
