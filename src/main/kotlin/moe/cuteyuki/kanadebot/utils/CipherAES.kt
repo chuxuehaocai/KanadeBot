@@ -8,44 +8,27 @@ import javax.crypto.spec.SecretKeySpec
 object CipherAES {
     private const val BLOCK_SIZE = 128 // bits
 
-    private val AES_KEY: ByteArray
-    private val AES_IV: ByteArray
-
-    // AES 加密参数 (from reverseMai/config.py)
-    private val AES_KEY_STR = ConfigManager.getConfig().aesKey
-    private val AES_IV_STR = ConfigManager.getConfig().aesIv
-
-    init {
-        AES_KEY = parseKeyOrIv(AES_KEY_STR)
-        AES_IV = parseKeyOrIv(AES_IV_STR)
+    /**
+     * 懒加载 AES 密钥和 IV，确保 ConfigManager 已初始化
+     */
+    private val AES_KEY: ByteArray by lazy {
+        val keyStr = ConfigManager.getConfig().aesKey
+        keyStr.toByteArray(Charsets.UTF_8)
     }
 
-    /**
-     * 判断字符串是否是十六进制
-     */
-    private fun isHexString(str: String): Boolean =
-        str.matches("^[0-9a-fA-F]+$".toRegex())
-
-    /**
-     * 转换配置中的 key/iv
-     */
-    private fun parseKeyOrIv(value: String): ByteArray {
-        return if (isHexString(value)) {
-            hexStringToBytes(value)
-        } else {
-            // 普通字符串，先转 hex 再 decode
-            val hex = bytesToHex(value.toByteArray(Charsets.UTF_8))
-            hexStringToBytes(hex)
-        }
+    private val AES_IV: ByteArray by lazy {
+        val ivStr = ConfigManager.getConfig().aesIv
+        ivStr.toByteArray(Charsets.UTF_8)
     }
 
     /**
      * AES CBC PKCS#7 加密
+     * 完全参照 sdgbpack/config.py AESHandler.encrypt
      */
     @JvmStatic
     @Throws(Exception::class)
     fun encrypt(plaintext: ByteArray): ByteArray {
-        val padded = pad(plaintext)
+        val padded = pkcs7Pad(plaintext)
 
         val cipher = Cipher.getInstance("AES/CBC/NoPadding")
         val keySpec = SecretKeySpec(AES_KEY, "AES")
@@ -57,23 +40,27 @@ object CipherAES {
 
     /**
      * AES CBC PKCS#7 解密
+     * 完全参照 sdgbpack/config.py AESHandler.decrypt
      */
     @JvmStatic
     @Throws(Exception::class)
     fun decrypt(ciphertext: ByteArray): ByteArray {
+        if (ciphertext.isEmpty()) {
+            throw IllegalArgumentException("响应内容为空")
+        }
         val cipher = Cipher.getInstance("AES/CBC/NoPadding")
         val keySpec = SecretKeySpec(AES_KEY, "AES")
         val ivSpec = IvParameterSpec(AES_IV)
 
         cipher.init(Cipher.DECRYPT_MODE, keySpec, ivSpec)
         val decrypted = cipher.doFinal(ciphertext)
-        return unpad(decrypted)
+        return pkcs7Unpad(decrypted)
     }
 
     /**
      * PKCS#7 padding
      */
-    private fun pad(data: ByteArray): ByteArray {
+    private fun pkcs7Pad(data: ByteArray): ByteArray {
         val blockSize = BLOCK_SIZE / 8
         val paddingLength = blockSize - (data.size % blockSize)
         val padded = data.copyOf(data.size + paddingLength)
@@ -84,34 +71,9 @@ object CipherAES {
     /**
      * 移除 PKCS#7 padding
      */
-    private fun unpad(paddedData: ByteArray): ByteArray {
+    private fun pkcs7Unpad(paddedData: ByteArray): ByteArray {
         val padChar = paddedData.last().toInt() and 0xFF
-        require(padChar in 1..BLOCK_SIZE / 8) { "Invalid padding" }
+        require(padChar in 1..BLOCK_SIZE / 8) { "Invalid padding: $padChar" }
         return paddedData.copyOf(paddedData.size - padChar)
-    }
-
-    /**
-     * hex -> byte[]
-     */
-    private fun hexStringToBytes(hex: String): ByteArray {
-        val len = hex.length
-        require(len % 2 == 0) { "Invalid hex string length" }
-        val data = ByteArray(len / 2)
-        for (i in hex.indices step 2) {
-            data[i / 2] = ((Character.digit(hex[i], 16) shl 4)
-                    + Character.digit(hex[i + 1], 16)).toByte()
-        }
-        return data
-    }
-
-    /**
-     * byte[] -> hex
-     */
-    private fun bytesToHex(bytes: ByteArray): String {
-        val sb = StringBuilder()
-        for (b in bytes) {
-            sb.append(String.format("%02x", b))
-        }
-        return sb.toString()
     }
 }

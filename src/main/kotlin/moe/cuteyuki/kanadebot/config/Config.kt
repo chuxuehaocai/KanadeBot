@@ -15,5 +15,6 @@ data class Config(
     val regionName: String = "",
     val placeId: Int = 0,
     val placeName: String = "",
-    val qqid: Long = 0
+    val qqid: Long = 0,
+    val deepSeekApiKey: String = ""
 )

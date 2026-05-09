@@ -40,8 +40,14 @@ dependencies {
     // Fastjson
     implementation("com.alibaba.fastjson2:fastjson2:2.0.57")
 
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+
     // ZXing - QR Code detection & decoding
     implementation("com.google.zxing:javase:3.5.3")
+
+    // OkHttp
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
 tasks.test {

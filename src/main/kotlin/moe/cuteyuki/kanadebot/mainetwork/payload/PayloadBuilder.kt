@@ -1,5 +1,6 @@
 package moe.cuteyuki.kanadebot.mainetwork.payload
 
+import com.alibaba.fastjson2.JSONArray
 import com.alibaba.fastjson2.JSONObject
 import moe.cuteyuki.kanadebot.config.Config
 import java.time.LocalDateTime
@@ -8,7 +9,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * 构建 MaiMai 各类 API 请求负载
- * (mirrors payload.py)
+ * (mirrors payload.py - 全面参考 sdgbpack)
  */
 object PayloadBuilder {
 
@@ -40,10 +41,12 @@ object PayloadBuilder {
         "isNewKaleidxScopeList" to ""
     )
 
+    // 完全参照 sdgbpack/config.py ITEM_KIND_MAP
     private val ITEM_KIND_MAP = mapOf(
-        "music" to 0, "musicMas" to 1, "musicRem" to 2, "frame" to 3,
-        "title" to 4, "icon" to 5, "partner" to 6, "plate" to 7,
-        "ticket" to 8, "character" to 9, "mile" to 10
+        "frame" to 1, "title" to 2, "icon" to 3, "partner" to 4, "plate" to 5,
+        "ticket" to 6, "character" to 7, "music" to 8, "musicMas" to 9,
+        "musicRem" to 10, "musicSrg" to 11, "mile" to 12, "present" to 13,
+        "intimateItem" to 14, "kaleidxScopeKey" to 15
     )
 
     /**
@@ -58,24 +61,22 @@ object PayloadBuilder {
     }
 
     /**
-     * 计算成绩等级
+     * 计算成绩等级 (完全参照 sdgbpack/config.py calc_score_rank)
      */
     private fun calcScoreRank(achievement: Int): Int {
         return when {
-            achievement >= 1009000 -> 13 // SSS+
-            achievement >= 1007500 -> 12 // SSS
-            achievement >= 1005000 -> 11 // SS+
-            achievement >= 1000000 -> 10 // SS
-            achievement >= 990000 -> 9   // S+
-            achievement >= 970000 -> 8   // S
-            achievement >= 940000 -> 7   // AAA
-            achievement >= 900000 -> 6   // AA
-            achievement >= 800000 -> 5   // A
-            achievement >= 700000 -> 4   // BBB
-            achievement >= 600000 -> 3   // BB
-            achievement >= 500000 -> 2   // B
-            achievement >= 400000 -> 1   // C
-            else -> 0                     // D
+            achievement >= 1011000 -> 12
+            achievement >= 1010000 -> 11
+            achievement >= 1009000 -> 10
+            achievement >= 1008000 -> 9
+            achievement >= 1007000 -> 8
+            achievement >= 1005000 -> 7
+            achievement >= 1004000 -> 6
+            achievement >= 1002000 -> 5
+            achievement >= 1000000 -> 4
+            achievement >= 990000 -> 3
+            achievement >= 970000 -> 2
+            else -> 1
         }
     }
 
@@ -96,7 +97,7 @@ object PayloadBuilder {
      * mirrors payload.py generate_ticket_request
      */
     fun generateTicketRequest(
-        userId: Long, ticketId: Int, loginDateTime: Long, cfg: Config, playerRating: Int = 0
+        userId: Long, ticketId: Int, loginDateTime: Any, cfg: Config, playerRating: Int = 0
     ): String {
         val now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
@@ -127,6 +128,21 @@ object PayloadBuilder {
         return json.toJSONString()
     }
 
+
+    /**
+     * 生成游玩记录请求 (UploadUserPlaylogListApi)
+     * mirrors payload.py generate_playlog_request
+     *
+     * 重载：接受 userInfoList (7 elements)，自动取 index 0 的 userData
+     */
+    fun generatePlaylogRequest(
+        loginId: Long, musicData: Map<String, Any>, userInfoList: List<JSONObject>,
+        cfg: Config, useTicketId: Int = -1
+    ): String {
+        val userDataJson = if (userInfoList.isNotEmpty()) userInfoList[0] else JSONObject()
+        return generatePlaylogRequest(loginId, musicData, userDataJson, cfg, useTicketId)
+    }
+
     /**
      * 生成游玩记录请求 (UploadUserPlaylogListApi)
      * mirrors payload.py generate_playlog_request
@@ -140,7 +156,7 @@ object PayloadBuilder {
 
         // 解析 charaSlot
         val charaSlot = ud.getJSONArray("charaSlot") ?: let {
-            val arr = com.alibaba.fastjson2.JSONArray()
+            val arr = JSONArray()
             arr.addAll(listOf(0, 0, 0, 0, 0))
             arr
         }
@@ -239,15 +255,17 @@ object PayloadBuilder {
      * mirrors payload.py build_user_data_dict
      */
     private fun buildUserDataDict(
-        userDataJson: JSONObject, cfg: Config, loginDate: Long,
+        userDataJson: JSONObject, cfg: Config, loginDate: Any,
         playCountDelta: Int = 0, pointOverride: Int? = null,
         totalPointOverride: Int? = null, selectMapIdOverride: Int? = null
     ): JSONObject {
+
         val (ts, _, playTimeStr) = getPlayTimeStrings()
         val ud = userDataJson.getJSONObject("userData") ?: JSONObject()
 
         val point = pointOverride ?: ud.getIntValue("point")
         val totalPoint = totalPointOverride ?: ud.getIntValue("totalPoint")
+        // 完全参照 sdgbpack/payload.py: ud.get('selectMapId', 1)
         val selectMapId = selectMapIdOverride ?: ud.getIntValue("selectMapId").let { if (it == 0) 1 else it }
 
         val built = JSONObject()
@@ -270,8 +288,8 @@ object PayloadBuilder {
         built["gradeRank"] = ud.getIntValue("gradeRank")
         built["classRank"] = ud.getIntValue("classRank")
         built["courseRank"] = ud.getIntValue("courseRank")
-        built["charaSlot"] = ud.getJSONArray("charaSlot") ?: com.alibaba.fastjson2.JSONArray.parse(DEFAULT_CHARA_SLOTS)
-        built["charaLockSlot"] = ud.getJSONArray("charaLockSlot") ?: com.alibaba.fastjson2.JSONArray.parse(DEFAULT_CHARA_SLOTS)
+        built["charaSlot"] = ud.getJSONArray("charaSlot") ?: JSONArray.parse(DEFAULT_CHARA_SLOTS)
+        built["charaLockSlot"] = ud.getJSONArray("charaLockSlot") ?: JSONArray.parse(DEFAULT_CHARA_SLOTS)
         built["contentBit"] = ud.getString("contentBit") ?: ""
         built["playCount"] = ud.getIntValue("playCount") + playCountDelta
         built["currentPlayCount"] = ud.getIntValue("currentPlayCount") + playCountDelta
@@ -344,10 +362,14 @@ object PayloadBuilder {
     private fun buildUpsertUserAll(
         userDataJson: JSONObject, userExtendJson: JSONObject, userOptionJson: JSONObject,
         userRatingJson: JSONObject, userChargeJson: JSONObject, userActivityJson: JSONObject,
-        userMissionDataJson: JSONObject, cfg: Config, loginDate: Long,
+        userMissionDataJson: JSONObject, cfg: Config, loginDate: Any,
         playCountDelta: Int = 0, extras: Map<String, Any> = emptyMap()
     ): JSONObject {
-        val userDataDict = buildUserDataDict(userDataJson, cfg, loginDate, playCountDelta)
+
+        // Extract point/totalPoint overrides from extras (for maiMile command)
+        val pointOverride = extras["pointOverride"] as? Int
+        val totalPointOverride = extras["totalPointOverride"] as? Int
+        val userDataDict = buildUserDataDict(userDataJson, cfg, loginDate, playCountDelta, pointOverride, totalPointOverride)
 
         val upsert = JSONObject()
         upsert["userData"] = listOf(userDataDict)
@@ -361,7 +383,7 @@ object PayloadBuilder {
         upsert["userItemList"] = emptyList<Any>()
         upsert["userMusicDetailList"] = emptyList<Any>()
         upsert["userCourseList"] = emptyList<Any>()
-        upsert["userChargeList"] = userChargeJson.getJSONArray("userChargeList") ?: com.alibaba.fastjson2.JSONArray()
+        upsert["userChargeList"] = userChargeJson.getJSONArray("userChargeList") ?: JSONArray()
         upsert["userFavoriteList"] = DEFAULT_FAVORITE_LIST
 
         val activityObj = userActivityJson.getJSONObject("userActivity") ?: JSONObject()
@@ -370,8 +392,9 @@ object PayloadBuilder {
 
         val weekly = userMissionDataJson.getJSONObject("userWeeklyData") ?: JSONObject()
         val userWeekly = JSONObject()
-        userWeekly["lastLoginWeek"] = weekly.getString("lastLoginWeek") ?: "0"
-        userWeekly["beforeLoginWeek"] = weekly.getString("beforeLoginWeek") ?: "0"
+        // 完全参照 sdgbpack/payload.py: 保持原始类型 (int)
+        userWeekly["lastLoginWeek"] = weekly.getIntValue("lastLoginWeek")
+        userWeekly["beforeLoginWeek"] = weekly.getIntValue("beforeLoginWeek")
         userWeekly["friendBonusFlag"] = weekly.getBooleanValue("friendBonusFlag")
         upsert["userWeeklyData"] = userWeekly
 
@@ -390,8 +413,10 @@ object PayloadBuilder {
         }
 
         // Apply extras (overrides like userMapList, userItemList, etc.)
+        // Skip internal override keys that are handled separately
+        val skipKeys = setOf("userData", "userExtend", "userOption", "pointOverride", "totalPointOverride")
         extras.forEach { (key, value) ->
-            if (key !in listOf("userData", "userExtend", "userOption")) {
+            if (key !in skipKeys) {
                 upsert[key] = value
             }
         }
@@ -405,9 +430,10 @@ object PayloadBuilder {
      */
     fun buildBaseUpsert(
         userId: Long, loginId: Long, userInfoList: List<JSONObject>,
-        cfg: Config, loginDate: Long, playCountDelta: Int = 0,
+        cfg: Config, loginDate: Any, playCountDelta: Int = 0,
         extras: Map<String, Any> = emptyMap()
     ): String {
+
         // Pad user_info list to 7 elements
         val padded = userInfoList.toMutableList()
         while (padded.size < 7) padded.add(JSONObject())
@@ -433,8 +459,8 @@ object PayloadBuilder {
             extras
         )
 
-        // Remove playlog from extras since we handle it separately
-        val cleanExtras = extras - "userPlaylogList"
+        // Remove playlog and point/totalPoint overrides from extras since they're handled separately
+        val cleanExtras = extras - "userPlaylogList" - "pointOverride" - "totalPointOverride"
 
         // Re-apply extras on top of built upsert (handles overrides)
         cleanExtras.forEach { (key, value) ->
@@ -460,10 +486,11 @@ object PayloadBuilder {
      * mirrors payload.py generate_user_all_request
      */
     fun generateUserAllRequest(
-        loginId: Long, loginDate: Long, musicData: Map<String, Any>,
+        loginId: Long, loginDate: Any, musicData: Map<String, Any>,
         userInfoList: List<JSONObject>, cfg: Config, useTicketId: Int = -1,
         userId: Long = 0
     ): String {
+
         val (ts, _, playTimeStr) = getPlayTimeStrings()
         val userData = if (userInfoList.isNotEmpty()) userInfoList[0] else JSONObject()
         val ud = userData.getJSONObject("userData") ?: JSONObject()
@@ -474,8 +501,8 @@ object PayloadBuilder {
 
         // Build mission list
         val userMissionData = if (userInfoList.size > 6) userInfoList[6] else JSONObject()
-        val missionDataList = userMissionData.getJSONArray("userMissionDataList") ?: com.alibaba.fastjson2.JSONArray()
-        val missionList = com.alibaba.fastjson2.JSONArray()
+        val missionDataList = userMissionData.getJSONArray("userMissionDataList") ?: JSONArray()
+        val missionList = JSONArray()
         for (i in 0 until minOf(missionDataList.size, 6)) {
             val m = missionDataList.getJSONObject(i)
             val entry = JSONObject()

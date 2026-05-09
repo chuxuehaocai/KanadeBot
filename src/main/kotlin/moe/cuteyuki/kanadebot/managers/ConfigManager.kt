@@ -34,12 +34,18 @@ object ConfigManager {
         val content = configFile.readText()
         val json = JSON.parseObject(content)
 
+        // 去除 titleServerUrl 末尾的斜杠，防止拼接 API hash 时出现双斜杠
+        var rawUrl = json.getString("titleServerUrl") ?: ""
+        if (rawUrl.endsWith("/")) {
+            rawUrl = rawUrl.removeSuffix("/")
+        }
+
         config = Config(
             keychipId = json.getString("keychipId") ?: "",
             aimeSalt = json.getString("aimeSalt") ?: "",
             aesIv = json.getString("aesIv") ?: "",
             aesKey = json.getString("aesKey") ?: "",
-            titleServerUrl = json.getString("titleServerUrl") ?: "",
+            titleServerUrl = rawUrl,
             aimeUrl = json.getString("aimeUrl") ?: "",
             packetSalt = json.getString("packetSalt") ?: "",
             obfuscateParam = json.getString("obfuscateParam") ?: "LatuAa81",
@@ -49,8 +55,10 @@ object ConfigManager {
             regionName = json.getString("regionName") ?: "",
             placeId = json.getIntValue("placeId"),
             placeName = json.getString("placeName") ?: "",
+            deepSeekApiKey = json.getString("deepSeekApiKey") ?: "",
         )
     }
+
 
     /**
      * 创建默认配置文件并保存
@@ -80,6 +88,7 @@ object ConfigManager {
         json["regionName"] = config.regionName
         json["placeId"] = config.placeId
         json["placeName"] = config.placeName
+        json["deepSeekApiKey"] = config.deepSeekApiKey
 
         configFile.writeText(json.toJSONString(com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat))
     }

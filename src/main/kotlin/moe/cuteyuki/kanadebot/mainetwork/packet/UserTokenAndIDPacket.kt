@@ -25,7 +25,9 @@ import java.util.HashMap
 class UserTokenAndIDPacket
 @JvmOverloads constructor(
     qrCodeToken: String,
+    @JSONField(serialize = false)
     private val chimeSalt: String = "XcW5FW4cPArBXEk4vzKz3CIrMuA5EVVW"
+
 ) : IPacket {
 
     @JSONField(name = "chipID")
@@ -44,7 +46,9 @@ class UserTokenAndIDPacket
     val timestamp: String = LocalDateTime.now(ZoneId.of("Asia/Tokyo"))
         .format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
 
+    @JSONField(serialize = false)
     private var userIdOrError: Long = -1
+
 
     init {
         // SHA256(chipId + timestamp + chimeSalt)

@@ -6,6 +6,10 @@ import com.mikuac.shiro.common.utils.MsgUtils
 import com.mikuac.shiro.core.Bot
 import com.mikuac.shiro.dto.event.message.GroupMessageEvent
 import com.mikuac.shiro.dto.event.message.MessageEvent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import moe.cuteyuki.kanadebot.command.CommandData
 import moe.cuteyuki.kanadebot.command.GroupContext
 import moe.cuteyuki.kanadebot.command.ICommand
@@ -18,23 +22,19 @@ import moe.cuteyuki.kanadebot.mainetwork.packet.UserTokenAndIDPacket
 import moe.cuteyuki.kanadebot.managers.ConfigManager
 import moe.cuteyuki.kanadebot.managers.PendingLoginManager
 import moe.cuteyuki.kanadebot.utils.replyGroupMsg
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 使用功能票（发票）命令
  *
  * 从 main.py 移植「使用功能票 (发票)」功能
- * 完整流程：
+ * 完整流程（完全参照 sdgbpack/main.py use_ticket）：
  *   1. QR 认证 → 获取 userId & token
  *   2. UserLoginApi → 登录 (获取 loginId, loginDate)
  *   3. GetUserDataApi → 获取用户数据 (playerRating)
  *   4. UpsertUserChargelogApi → 上传票购买记录
- *   5. UploadUserPlaylogListApi → 上传游玩记录 (含 useTicketId)
- *   6. UpsertUserAllApi → 更新用户数据 (含 playCount+1, music, mission, etc.)
+ *   5. UploadUserPlaylogListApi → 上传游玩记录（使用票）
+ *   6. UpsertUserAllApi → 更新用户数据
  *   7. UserLogoutApi → 登出
  */
 class SendTicketCommand : ICommand {
@@ -43,29 +43,10 @@ class SendTicketCommand : ICommand {
     private val pendingTicketIds = ConcurrentHashMap<Long, Int>()
 
     /**
-     * 将 "yyyy-MM-dd HH:mm:ss" 格式的日期字符串解析为 Unix 时间戳（秒）
-     * 如果解析失败，返回当前时间戳
+     * 协程作用域，用于启动异步 API 调用流程
+     * SupervisorJob 确保单个协程失败不会影响其他协程
      */
-    private fun parseDateTimeToEpoch(dateTimeStr: Any?): Long {
-        if (dateTimeStr is Long || dateTimeStr is Int) {
-            return (dateTimeStr as Number).toLong()
-        }
-        if (dateTimeStr is String && dateTimeStr.isNotEmpty()) {
-            try {
-                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                val localDateTime = LocalDateTime.parse(dateTimeStr, formatter)
-                return localDateTime.atZone(ZoneId.of("Asia/Shanghai")).toEpochSecond()
-            } catch (e: DateTimeParseException) {
-                // fallback: treat as numeric string
-                try {
-                    return dateTimeStr.toLong()
-                } catch (_: NumberFormatException) {
-                    // ignore
-                }
-            }
-        }
-        return System.currentTimeMillis() / 1000
-    }
+    private val commandScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val data: CommandData
         get() = CommandData(
@@ -113,10 +94,10 @@ class SendTicketCommand : ICommand {
     }
 
     /**
-     * 调用 API，失败时抛出异常
+     * 挂起版本的 callApi，在 IO 调度器上执行
      */
-    private fun callApi(apiName: String, jsonBody: String, userId: Long): String {
-        return NetworkManager.sendToTitle(jsonBody, apiName, userId)
+    private suspend fun callApiSuspend(apiName: String, jsonBody: String, userId: Long): String {
+        return NetworkManager.sendToTitleSuspend(jsonBody, apiName, userId)
     }
 
     override fun handleQr(bot: Bot, qqUserId: Long, groupId: Long, messageId: Int, qrToken: String) {
@@ -127,40 +108,43 @@ class SendTicketCommand : ICommand {
                 return
             }
 
-        try {
-            // 1. QR 认证 → 获取 userId & token
-            val packetResult = UserTokenAndIDPacket(qrToken).execute()
+        // 在协程中启动完整的异步流程，不阻塞当前线程
+        commandScope.launch {
+            try {
+                // 1. QR 认证 → 获取 userId & token
+                val packetResult = UserTokenAndIDPacket(qrToken).execute()
 
-            if (packetResult.first < 10000000) {
-                bot.sendPrivateMsg(qqUserId, "无效的QrCode Token. 错误代码：${packetResult.first}", false)
-                return
+                if (packetResult.first < 10000000) {
+                    bot.sendPrivateMsg(qqUserId, "无效的QrCode Token. 错误代码：${packetResult.first}", false)
+                    return@launch
+                }
+
+                val targetUserId = packetResult.first
+                val token = packetResult.second
+                val cfg = ConfigManager.getConfig()
+
+                // 执行完整流程（挂起函数，不会阻塞线程）
+                completeTicketFlow(bot, qqUserId, groupId, messageId, targetUserId, token, cfg, ticketId)
+
+            } catch (e: Exception) {
+                System.err.println("[SendTicketCommand] 错误: ${e.message}")
+                e.printStackTrace()
+                bot.sendPrivateMsg(qqUserId, "处理出错: ${e.message}", false)
             }
-
-            val targetUserId = packetResult.first
-            val token = packetResult.second
-            val cfg = ConfigManager.getConfig()
-
-            // 执行完整流程
-            completeTicketFlow(bot, qqUserId, groupId, messageId, targetUserId, token, cfg, ticketId)
-
-        } catch (e: Exception) {
-            System.err.println("[SendTicketCommand] 错误: ${e.message}")
-            e.printStackTrace()
-            bot.sendPrivateMsg(qqUserId, "处理出错: ${e.message}", false)
         }
     }
 
     /**
-     * 完整的功能票使用流程
-     * (mirrors main.py use_ticket)
+     * 完整的功能票使用流程（挂起版本）
+     * 完全参照 sdgbpack/main.py use_ticket
      */
-    private fun completeTicketFlow(
+    private suspend fun completeTicketFlow(
         bot: Bot, qqUserId: Long, groupId: Long, messageId: Int,
         targetUserId: Long, token: String, cfg: moe.cuteyuki.kanadebot.config.Config,
         ticketId: Int
     ) {
         var loginId: Long = 0
-        var loginDate: Long = 0
+        var loginDate: Any = 0L
 
         try {
             // ========== 2. 登录 ==========
@@ -169,7 +153,7 @@ class SendTicketCommand : ICommand {
                 targetUserId, "", cfg.regionId, cfg.placeId, cfg.clientId,
                 ts - 600, ts, false, 0, token
             )
-            val loginResultStr = callApi("UserLoginApi", loginPacket.toJson(), targetUserId)
+            val loginResultStr = callApiSuspend("UserLoginApi", loginPacket.toJson(), targetUserId)
             val loginResult = JSON.parseObject(loginResultStr)
             val returnCode = loginResult.getIntValue("returnCode")
             if (returnCode != 1) {
@@ -177,14 +161,13 @@ class SendTicketCommand : ICommand {
                 return
             }
             loginId = loginResult.getLongValue("loginId")
-            loginDate = parseDateTimeToEpoch(loginResult.get("lastLoginDate"))
+            loginDate = loginResult.get("lastLoginDate") ?: 0L
             println("[SendTicketCommand] 登录成功 loginId=$loginId, loginDate=$loginDate")
 
             // ========== 3. 获取用户数据（获取 playerRating 用于发票）==========
             val userDataPacket = UserDataPacket(targetUserId)
-            val userDataResultStr = callApi("GetUserDataApi", userDataPacket.toJson(), targetUserId)
-            val parsed = JSON.parseObject(userDataResultStr)
-            val userDataJson: JSONObject = parsed ?: JSONObject()
+            val userDataResultStr = callApiSuspend("GetUserDataApi", userDataPacket.toJson(), targetUserId)
+            val userDataJson: JSONObject = JSON.parseObject(userDataResultStr) ?: JSONObject()
             val playerRating = userDataJson.getJSONObject("userData")
                 ?.getIntValue("playerRating") ?: 0
             println("[SendTicketCommand] 当前 Rating: $playerRating")
@@ -193,47 +176,48 @@ class SendTicketCommand : ICommand {
             val ticketRequest = PayloadBuilder.generateTicketRequest(
                 targetUserId, ticketId, loginDate, cfg, playerRating
             )
-            callApi("UpsertUserChargelogApi", ticketRequest, targetUserId)
+            callApiSuspend("UpsertUserChargelogApi", ticketRequest, targetUserId)
             println("[SendTicketCommand] 功能票 (ID: $ticketId) 已发送")
 
-//            // ========== 5. 构造游玩数据 ==========
-//            val musicData = mapOf<String, Any>(
-//                "musicId" to 417,
-//                "level" to 3,
-//                "playCount" to 1,
-//                "achievement" to 1010000,
-//                "comboStatus" to 4,
-//                "syncStatus" to 4,
-//                "deluxscoreMax" to 2277,
-//                "scoreRank" to 13,
-//                "extNum1" to 0
-//            )
+            // ========== 5. 上传游玩记录（使用票）==========
+            // 构造 musicData（完全参照 sdgbpack/main.py use_ticket）
+            val musicData = mapOf<String, Any>(
+                "musicId" to 417,
+                "level" to 3,
+                "playCount" to 1,
+                "achievement" to 1010000,
+                "comboStatus" to 4,
+                "syncStatus" to 4,
+                "deluxscoreMax" to 2277,
+                "scoreRank" to 13,
+                "extNum1" to 0
+            )
 
-//            // ========== 6. UploadUserPlaylogListApi → 上传游玩记录 ==========
-//            val playlogRequest = PayloadBuilder.generatePlaylogRequest(
-//                loginId, musicData, userDataJson, cfg, ticketId
-//            )
-//            callApi("UploadUserPlaylogListApi", playlogRequest, targetUserId)
-//            println("[SendTicketCommand] 游玩记录已上传 (含功能票)")
+            // 构建 userInfoList (7 elements)
+            val userInfoList = listOf(
+                userDataJson,  // GetUserDataApi result (index 0)
+                JSONObject(),  // userExtend (index 1)
+                JSONObject(),  // userOption (index 2)
+                JSONObject(),  // userRating (index 3)
+                JSONObject(),  // userCharge (index 4)
+                JSONObject(),  // userActivity (index 5)
+                JSONObject()   // userMissionData (index 6)
+            )
 
-//            // ========== 7. UpsertUserAllApi → 更新用户数据 ==========
-//            // 构建 userInfoList (7 elements)
-//            val userInfoList = listOf(
-//                userDataJson,  // GetUserDataApi result
-//                JSONObject(),  // userExtend
-//                JSONObject(),  // userOption
-//                JSONObject(),  // userRating
-//                JSONObject(),  // userChargeList
-//                JSONObject(),  // userActivity
-//                JSONObject()   // userMissionData
-//            )
-//
-//            val userAllRequest = PayloadBuilder.generateUserAllRequest(
-//                loginId, loginDate, musicData, userInfoList, cfg, ticketId, targetUserId
-//            )
-//            val userAllResult = callApi("UpsertUserAllApi", userAllRequest, targetUserId)
+            // 生成 playlog 请求
+            val playlogRequest = PayloadBuilder.generatePlaylogRequest(
+                loginId, musicData, userInfoList, cfg, ticketId
+            )
+            callApiSuspend("UploadUserPlaylogListApi", playlogRequest, targetUserId)
+            println("[SendTicketCommand] 游玩记录已上传")
 
-            // ========== 9. (登出后执行) 构建回复消息 ==========
+            // ========== 6. UpsertUserAllApi → 更新用户数据 ==========
+            val userAllRequest = PayloadBuilder.generateUserAllRequest(
+                loginId, loginDate, musicData, userInfoList, cfg, ticketId, targetUserId
+            )
+            val userAllResult = callApiSuspend("UpsertUserAllApi", userAllRequest, targetUserId)
+
+            // ========== 7. 构建回复消息 ==========
             val msgBuilder = MsgUtils.builder()
                 .reply(messageId)
                 .at(qqUserId)
@@ -242,22 +226,22 @@ class SendTicketCommand : ICommand {
             val ticketName = TICKET_MAP.getOrDefault(ticketId, "票$ticketId")
             msgBuilder.text("🎫 使用票: $ticketName (ID: $ticketId)\n")
 
-//            val userAllJson = JSON.parseObject(userAllResult)
-//            val rc = userAllJson.getIntValue("returnCode")
-//            msgBuilder.text(if (rc == 1) "✅ 数据更新成功\n" else "⚠️ 数据更新 returnCode=$rc\n")
-//
-//            // 检查 userGetPointList 奖励
-//            val upsertAll = userAllJson.getJSONObject("upsertUserAll")
-//            if (upsertAll != null) {
-//                val pointList = upsertAll.getJSONArray("userGetPointList")
-//                if (pointList != null && pointList.isNotEmpty()) {
-//                    msgBuilder.text("🎁 获得奖励:\n")
-//                    for (i in 0 until pointList.size) {
-//                        val reward = pointList.getJSONObject(i)
-//                        msgBuilder.text("  - pointType: ${reward.getIntValue("pointType")}, point: ${reward.getIntValue("addPoint")}\n")
-//                    }
-//                }
-//            }
+            val userAllJson = JSON.parseObject(userAllResult)
+            val rc = userAllJson.getIntValue("returnCode")
+            msgBuilder.text(if (rc == 1) "✅ 数据更新成功\n" else "⚠️ 数据更新 returnCode=$rc\n")
+
+            // 检查 userGetPointList 奖励
+            val upsertAll = userAllJson.getJSONObject("upsertUserAll")
+            if (upsertAll != null) {
+                val pointList = upsertAll.getJSONArray("userGetPointList")
+                if (pointList != null && pointList.isNotEmpty()) {
+                    msgBuilder.text("🎁 获得奖励:\n")
+                    for (i in 0 until pointList.size) {
+                        val reward = pointList.getJSONObject(i)
+                        msgBuilder.text("  - pointType: ${reward.getIntValue("pointType")}, point: ${reward.getIntValue("addPoint")}\n")
+                    }
+                }
+            }
 
             msgBuilder.text("✅ 已安全登出")
             bot.sendGroupMsg(groupId, msgBuilder.build(), false)
@@ -274,7 +258,7 @@ class SendTicketCommand : ICommand {
                     val logoutPacket = UserLogoutPacket(
                         targetUserId, "", cfg.regionId, cfg.placeId, cfg.clientId, loginDate, 1
                     )
-                    callApi("UserLogoutApi", logoutPacket.toJson(), targetUserId)
+                    callApiSuspend("UserLogoutApi", logoutPacket.toJson(), targetUserId)
                     println("[SendTicketCommand] 已安全登出")
                 } catch (e: Exception) {
                     System.err.println("[SendTicketCommand] 登出失败: ${e.message}")

@@ -36,8 +36,9 @@ data class UserLogoutPacket(
     val clientId: String,
 
     @JSONField(name = "loginDateTime")
-    val loginDateTime: Long,
+    val loginDateTime: Any,
 
     @JSONField(name = "type")
     val type: Int = 1
 ) : IPacket
+

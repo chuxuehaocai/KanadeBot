@@ -5,6 +5,10 @@ import com.mikuac.shiro.common.utils.MsgUtils
 import com.mikuac.shiro.core.Bot
 import com.mikuac.shiro.dto.event.message.GroupMessageEvent
 import com.mikuac.shiro.dto.event.message.MessageEvent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import moe.cuteyuki.kanadebot.command.CommandData
 import moe.cuteyuki.kanadebot.command.GroupContext
 import moe.cuteyuki.kanadebot.command.ICommand
@@ -13,6 +17,8 @@ import moe.cuteyuki.kanadebot.mainetwork.beans.*
 import moe.cuteyuki.kanadebot.mainetwork.packet.*
 import moe.cuteyuki.kanadebot.managers.ConfigManager
 import moe.cuteyuki.kanadebot.managers.PendingLoginManager
+import moe.cuteyuki.kanadebot.managers.ResourceManager
+import moe.cuteyuki.kanadebot.utils.Logger
 
 private val TICKET_MAP = mapOf(
     1 to "功能票",
@@ -30,6 +36,8 @@ class WhoamiCommand: ICommand {
             usage = "whoami",
             aliases = listOf("wami")
         )
+
+    private val commandScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun process(
         bot: Bot,
@@ -57,51 +65,59 @@ class WhoamiCommand: ICommand {
     }
 
     /**
-     * 安全调用 API，如果出错则返回 null
+     * 挂起版本的 callApi，在 IO 调度器上执行
      */
-    private fun safeCallApi(apiName: String, jsonBody: String, userId: Long): String? {
-        return try {
-            NetworkManager.sendToTitle(jsonBody, apiName, userId)
-        } catch (e: Exception) {
-            System.err.println("[WhoamiCommand] $apiName 调用失败: ${e.message}")
-            null
+    private suspend fun callApiSuspend(apiName: String, jsonBody: String, userId: Long): String {
+        return NetworkManager.sendToTitleSuspend(jsonBody, apiName, userId)
+    }
+
+    override fun handleQr(bot: Bot, qqUserId: Long, groupId: Long, messageId: Int, qrToken: String) {
+        commandScope.launch {
+            try {
+                val packetResult = UserTokenAndIDPacket(qrToken).execute()
+
+                if (packetResult.first < 10000000) {
+                    bot.sendPrivateMsg(qqUserId, "无效的QrCode Token. 错误代码：${packetResult.first}", false)
+                    return@launch
+                }
+
+                val targetUserId = packetResult.first
+                val token = packetResult.second
+                val cfg = ConfigManager.getConfig()
+
+                // 完整流程: login → get_preview → get_all_user_info → logout
+                completeWhoamiFlow(bot, qqUserId, groupId, messageId, targetUserId, token, cfg)
+
+            } catch (e: Exception) {
+                System.err.println("[WhoamiCommand] Error: ${e.message}")
+                e.printStackTrace()
+                bot.sendPrivateMsg(qqUserId, "登录处理出错: ${e.message}", false)
+            }
         }
     }
 
     /**
-     * 处理 whoami 的二维码扫码结果
-     * 流程: QR → login → GetUserPreviewApi → GetUserDataApi → GetUserKaleidxScopeApi
-     *       → GetUserMissionDataApi → GetUserChargeApi → logout
-     * (from api.py & main.py)
+     * 完整的 whoami 流程（挂起版本）
+     * mirrors main.py query_user_info + _session
      */
-    override fun handleQr(bot: Bot, qqUserId: Long, groupId: Long, messageId: Int, qrToken: String) {
+    private suspend fun completeWhoamiFlow(
+        bot: Bot, qqUserId: Long, groupId: Long, messageId: Int,
+        targetUserId: Long, token: String, cfg: moe.cuteyuki.kanadebot.config.Config
+    ) {
+
         try {
-            val packetResult = UserTokenAndIDPacket(qrToken).execute()
+            // ========== 1. GetUserPreviewApi ==========
+            val previewPacket = UserPreviewPacket(targetUserId, "", token, cfg.clientId)
+            val previewResultStr = callApiSuspend("GetUserPreviewApi", previewPacket.toJson(), targetUserId)
+            Logger.log(previewResultStr, Logger.LogType.INFO)
+            val userPreviewData = JSON.parseObject(previewResultStr, UserPreviewDataBean::class.java)
 
-            if (packetResult.first < 10000000) {
-                bot.sendPrivateMsg(qqUserId, "无效的QrCode Token. 错误代码：${packetResult.first}", false)
-                return
-            }
-
-            val targetUserId = packetResult.first
-            val token = packetResult.second
-            val cfg = ConfigManager.getConfig()
-
-            val previewPacket = UserPreviewPacket(
-                targetUserId,
-                "",
-                token,
-                cfg.clientId
-            )
-            val previewResult = safeCallApi("GetUserPreviewApi", previewPacket.toJson(), targetUserId)
-            val userPreviewData = previewResult?.let { JSON.parseObject(it, UserPreviewDataBean::class.java) }
-
+            // ========== 3. GetUserChargeApi ==========
             val chargePacket = UserChargePacket(targetUserId)
+            val chargeResultStr = callApiSuspend("GetUserChargeApi", chargePacket.toJson(), targetUserId)
+            val userChargeData = JSON.parseObject(chargeResultStr, UserChargeData::class.java)
 
-            val chargeResult = safeCallApi("GetUserChargeApi", chargePacket.toJson(), targetUserId)
-            val userChargeData = chargeResult?.let { JSON.parseObject(it, UserChargeData::class.java) }
-
-            // --- 5. 构建消息 ---
+            // ========== 4. 构建消息 ==========
             val msgBuilder = MsgUtils.builder()
                 .reply(messageId)
                 .at(qqUserId)
@@ -109,6 +125,10 @@ class WhoamiCommand: ICommand {
 
             // GetUserPreviewApi
             if (userPreviewData != null) {
+                val iconBase64 = ResourceManager.iconImageBase64(userPreviewData.iconId.toString())
+                if (iconBase64 != null) {
+                    msgBuilder.img("base64://$iconBase64")
+                }
                 msgBuilder.text("昵称: ${userPreviewData.userName} (${userPreviewData.playerRating})\n")
                 msgBuilder.text(" - 最后游玩版本: ${userPreviewData.lastRomVersion}\n")
                 msgBuilder.text(" - 最后存档版本: ${userPreviewData.lastDataVersion}\n")
@@ -119,7 +139,6 @@ class WhoamiCommand: ICommand {
             } else {
                 msgBuilder.text("❌ 获取用户基本信息失败\n")
             }
-
 
             // GetUserChargeApi
             if (userChargeData != null) {
@@ -134,13 +153,14 @@ class WhoamiCommand: ICommand {
                     msgBuilder.text("\n🎫 功能票: 无\n")
                 }
             }
+
             bot.sendGroupMsg(groupId, msgBuilder.build(), false)
             bot.sendPrivateMsg(qqUserId, "✅ 已在群内发送你的用户信息！", false)
 
         } catch (e: Exception) {
-            System.err.println("[WhoamiCommand] Error: ${e.message}")
+            System.err.println("[WhoamiCommand] completeWhoamiFlow 错误: ${e.message}")
             e.printStackTrace()
-            bot.sendPrivateMsg(qqUserId, "登录处理出错: ${e.message}", false)
+            bot.sendPrivateMsg(qqUserId, "❌ 处理出错: ${e.message}", false)
         }
     }
 }

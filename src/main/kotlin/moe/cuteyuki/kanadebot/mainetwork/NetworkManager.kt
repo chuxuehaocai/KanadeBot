@@ -1,5 +1,7 @@
 package moe.cuteyuki.kanadebot.mainetwork
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import moe.cuteyuki.kanadebot.managers.ConfigManager
 import moe.cuteyuki.kanadebot.utils.CipherAES
 import moe.cuteyuki.kanadebot.utils.HttpClient
@@ -23,8 +25,28 @@ object NetworkManager {
     private val API_VERSION: String
         get() = ConfigManager.getConfig().apiVersion
 
+    /**
+     * 挂起版本的 sendToTitle，在 IO 调度器上执行阻塞网络操作
+     */
+    @Throws(Exception::class)
+    suspend fun sendToTitleSuspend(data: String, useApi: String?, userId: Long): String {
+        return withContext(Dispatchers.IO) {
+            sendToTitleBlocking(data, useApi, userId)
+        }
+    }
+
+    /**
+     * 阻塞版本的 sendToTitle（保留向后兼容性）
+     */
     @Throws(Exception::class)
     fun sendToTitle(data: String, useApi: String?, userId: Long): String {
+        return sendToTitleBlocking(data, useApi, userId)
+    }
+
+    /**
+     * 实际的阻塞网络调用实现
+     */
+    private fun sendToTitleBlocking(data: String, useApi: String?, userId: Long): String {
         // APIObfuscator 内部会拼接 "MaimaiChn"，勿在外面重复拼接 (参考 reverseMai/config.py get_api_hash)
         val api: String = useApi!!
 
@@ -43,7 +65,10 @@ object NetworkManager {
         headers.put("Content-Encoding", "deflate")
         headers.put("Host", "maimai-gm.wahlap.com:42081")
 
-        val url = titleServerUri + hashApi
+        // Python: url = f"{SDGB_BASE_URL}/{get_api_hash(api_name)}"
+        // 需要在 base URL 和 hash 之间加 "/"
+        val url = titleServerUri + "/" + hashApi
+
         Logger.log("URL:" + url + " Data:" + data, Logger.LogType.DEBUG)
 
         // 重试机制 (from reverseMai/api.py - 2次重试)
@@ -154,7 +179,11 @@ object NetworkManager {
 
     @Throws(IOException::class)
     private fun zlibCompress(input: ByteArray?): ByteArray {
-        val deflater = Deflater()
+        // 使用 nowrap=true 以匹配 Python zlib.compress() 的 zlib 格式 (RFC 1950)
+        // Python: zlib.compress() → zlib format (with 2-byte header + 4-byte checksum)
+        // Java Deflater(level, nowrap=false) → zlib format
+        // Java Deflater() → raw deflate (WRONG!)
+        val deflater = Deflater(Deflater.DEFAULT_COMPRESSION, false)
         deflater.setInput(input)
         deflater.finish()
 
@@ -179,7 +208,8 @@ object NetworkManager {
 
     @Throws(IOException::class)
     private fun zlibDecompress(input: ByteArray?): ByteArray {
-        val inflater = Inflater()
+        // 使用 nowrap=true 以匹配 Python zlib.decompress() 的 zlib 格式 (RFC 1950)
+        val inflater = Inflater(false)
         inflater.setInput(input)
 
         val buffer = ByteArray(1024)
@@ -205,4 +235,5 @@ object NetworkManager {
         }
         return output
     }
+
 }

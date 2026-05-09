@@ -10,7 +10,8 @@ data class UserPreviewDataBean(
     val userName: String,
 
     @JSONField(name = "isLogin")
-    val isLogin: Boolean,
+    val isLogin: Int,
+
 
     @JSONField(name = "lastGameId")
     val lastGameId: String? = null,
