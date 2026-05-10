@@ -24,7 +24,7 @@ import moe.cuteyuki.kanadebot.utils.replyGroupMsg
 class EvaluateRatingCommand : ICommand {
     override val data: CommandData
         get() = CommandData(
-            name = "b50",
+            name = "bb50",
             description = "锐评/分析你的B50数据（需要水鱼查分器账号）",
             usage = "b50 <水鱼用户名> 或 b50锐评 <水鱼用户名>",
             aliases = listOf("b50锐评", "b50不锐评", "看看实力")

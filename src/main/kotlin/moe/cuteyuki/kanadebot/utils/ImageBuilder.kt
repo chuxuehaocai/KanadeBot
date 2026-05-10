@@ -44,6 +44,9 @@ object ImageBuilder {
         //draw music name & ach
         g2d.color = Color(61, 61, 61)
         g2d.font = Font("MiSans-Regular", Font.PLAIN, 16)
+        if(data.musicName!!.length > 10){
+            data.musicName = data.musicName!!.substring(0,10)+"..."
+        }
         g2d.drawString(data.musicName, x + 100, y + 36)
         g2d.font = Font("MiSans-Bold", Font.PLAIN, 26)
         g2d.drawString(data.formatRatingSimple(data.achievement.toLong()), x+ 100, y + 65)
@@ -71,7 +74,15 @@ object ImageBuilder {
         )), x+95, y+67, 55, 28, null)
 
         //draw RA
-        g2d.color = Color(208, 200, 255)
+        when (data.level){
+            Basic -> g2d.color = Color(98,140,123)
+            Advanced -> g2d.color = Color(181,131,0)
+            Expert -> g2d.color = Color(211, 122, 122)
+            Master -> g2d.color = Color(103,80,164)
+            ReMaster -> g2d.color = Color(208, 200, 255)
+            null -> g2d.color = Color(0, 255, 2)
+        }
+       // g2d.color = Color(208, 200, 255)
         g2d.fillRoundRect(x+225, y+70, 68, 26, 30, 90)
         g2d.color = Color(61, 61, 61)
         g2d.font = Font("MiSans-Regular", Font.PLAIN, 12)

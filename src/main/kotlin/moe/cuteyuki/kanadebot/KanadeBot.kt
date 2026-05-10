@@ -9,6 +9,7 @@ import com.mikuac.shiro.dto.event.message.GroupMessageEvent
 import com.mikuac.shiro.dto.event.message.PrivateMessageEvent
 import com.mikuac.shiro.enums.MsgTypeEnum
 import jakarta.annotation.PostConstruct
+import moe.cuteyuki.kanadebot.command.commands.Best50ImageCommand
 import moe.cuteyuki.kanadebot.command.commands.EvaluateRatingCommand
 import moe.cuteyuki.kanadebot.command.commands.MaiMileCommand
 import moe.cuteyuki.kanadebot.command.commands.SendTicketCommand
@@ -36,6 +37,7 @@ class KanadeBot: BotPlugin() {
         CommandManager.register(MaiMileCommand())
         CommandManager.register(EvaluateRatingCommand())
         CommandManager.register(UpdateMusicDataCommand())
+        CommandManager.register(Best50ImageCommand())
         println("KanadeBot initialized. ${CommandManager.getCommands().size} command(s) registered.")
     }
 
