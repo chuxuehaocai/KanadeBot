@@ -22,7 +22,7 @@
 | `.whoami` / `.wami` | View your account info (rating, tickets, etc.) / 查看账号信息（Rating、功能票等） |
 | `.maiMile <amount>` / `.加里程` | Modify MaiMile (DX2025) / 修改舞里程 |
 | `.getTicket <id>` / `.发票` | Use a game ticket (功能票) / 使用功能票 |
-| `.b50` / `.b50锐评` / `.看看实力` | Analyze your B50 data with AI (DeepSeek) / 使用 AI 分析你的 B50 数据 |
+| `.b50` / `.b50锐评` / `.看看实力 <uid>` | Analyze your B50 data with AI (DeepSeek) — just provide your Maimai UID, no QR code needed / 使用 AI 分析你的 B50 数据 — 只需提供舞萌 UID，无需二维码 |
 
 ### Ticket Types / 功能票类型
 
@@ -51,7 +51,8 @@ KanadeBot
 │       ├── WhoamiCommand.kt           # Account info query
 │       ├── MaiMileCommand.kt          # MaiMile modification
 │       ├── SendTicketCommand.kt       # Ticket usage
-│       └── EvaluateRatingCommand.kt   # B50 AI analysis
+│       ├── EvaluateRatingCommand.kt   # B50 AI analysis (UID-based, no QR needed)
+│       └── Best50ImageCommand.kt      # B50 image generation (WIP)
 ├── config/
 │   └── Config.kt             # Configuration data class
 ├── managers/
@@ -173,21 +174,29 @@ All commands are triggered by prefixing with `.` (dot) in group chats.
 # Use a ticket / 使用功能票
 .getTicket 1
 
-# B50 analysis (sharp mode) / B50 锐评
-.b50锐评
+# B50 analysis (sharp mode) / B50 锐评 — provide your Maimai UID directly
+.b50锐评 <maimai_uid>
 # or / 或者
-.看看实力
+.看看实力 <maimai_uid>
 
-# B50 analysis (normal mode) / B50 普通分析
-.b50
+# B50 analysis (normal mode) / B50 普通分析 — provide your Maimai UID directly
+.b50 <maimai_uid>
 ```
 
 ### Workflow / 工作流程
+
+**For commands requiring game server interaction (`.whoami`, `.maiMile`, `.getTicket`):**
 
 1. Send a command in the group chat
 2. The bot prompts you to send your game QR code privately
 3. Send the QR code image (from your game's AIME login screen) to the bot in a private chat
 4. The bot processes the request and replies in the group
+
+**For B50 analysis (`.b50`, `.b50锐评`, `.看看实力`):**
+
+1. Send the command with your Maimai UID in the group chat (e.g., `.看看实力 12345678`)
+2. The bot fetches your rating data directly and runs AI analysis
+3. No QR code authentication needed — just your UID!
 
 ---
 

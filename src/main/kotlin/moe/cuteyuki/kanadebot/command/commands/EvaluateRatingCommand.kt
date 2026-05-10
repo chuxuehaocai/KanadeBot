@@ -14,10 +14,7 @@ import moe.cuteyuki.kanadebot.command.CommandData
 import moe.cuteyuki.kanadebot.command.ICommand
 import moe.cuteyuki.kanadebot.mainetwork.NetworkManager
 import moe.cuteyuki.kanadebot.mainetwork.packet.GetUserRatingPacket
-import moe.cuteyuki.kanadebot.mainetwork.packet.UserLoginPacket
-import moe.cuteyuki.kanadebot.mainetwork.packet.UserLogoutPacket
 import moe.cuteyuki.kanadebot.mainetwork.packet.UserTokenAndIDPacket
-import moe.cuteyuki.kanadebot.managers.ConfigManager
 import moe.cuteyuki.kanadebot.managers.PendingLoginManager
 import moe.cuteyuki.kanadebot.utils.DeepSeekConnector
 import moe.cuteyuki.kanadebot.utils.Logger
@@ -40,6 +37,11 @@ class EvaluateRatingCommand : ICommand {
 
         val userId = event.sender.userId
         val rawMessage = event.message.trim()
+
+//        if (args.isEmpty()) {
+//            bot.replyGroupMsg(event, "❌ 用法：.b50 <水鱼用户名> 或 .b50锐评 <水鱼用户名>")
+//            return
+//        }
 
         // 判断是否为锐评模式
         val sharp = rawMessage.contains("看看实力")
@@ -74,10 +76,8 @@ class EvaluateRatingCommand : ICommand {
                 }
 
                 val targetUserId = packetResult.first
-                val token = packetResult.second
-                val cfg = ConfigManager.getConfig()
 
-                completeB50Review(bot, qqUserId, groupId, messageId, targetUserId, token, cfg, sharp)
+                completeB50Review(bot, qqUserId, groupId, messageId, targetUserId, sharp)
 
             } catch (e: Exception) {
                 System.err.println("[EvaluateRatingCommand] Error: ${e.message}")
@@ -88,15 +88,12 @@ class EvaluateRatingCommand : ICommand {
     }
 
     /**
-     * 完整的 B50 锐评流程：登录 → 获取Rating → 调DeepSeek → 登出
+     * 完整的 B50 锐评流程：QR认证 → 获取Rating → 调DeepSeek
      */
     private suspend fun completeB50Review(
         bot: Bot, qqUserId: Long, groupId: Long, messageId: Int,
-        targetUserId: Long, token: String, cfg: moe.cuteyuki.kanadebot.config.Config, sharp: Boolean
+        targetUserId: Long, sharp: Boolean
     ) {
-        var loginId: Long = 0
-        var loginDate: Any = 0L
-
         try {
             // ========== 2. 获取 Rating 数据 ==========
             val ratingPacket = GetUserRatingPacket(targetUserId)

@@ -13,6 +13,7 @@ import moe.cuteyuki.kanadebot.command.commands.EvaluateRatingCommand
 import moe.cuteyuki.kanadebot.command.commands.MaiMileCommand
 import moe.cuteyuki.kanadebot.command.commands.SendTicketCommand
 import moe.cuteyuki.kanadebot.command.commands.Test
+import moe.cuteyuki.kanadebot.command.commands.UpdateMusicDataCommand
 import moe.cuteyuki.kanadebot.command.commands.WhoamiCommand
 import moe.cuteyuki.kanadebot.managers.CommandManager
 import moe.cuteyuki.kanadebot.managers.ConfigManager
@@ -34,6 +35,7 @@ class KanadeBot: BotPlugin() {
         CommandManager.register(SendTicketCommand())
         CommandManager.register(MaiMileCommand())
         CommandManager.register(EvaluateRatingCommand())
+        CommandManager.register(UpdateMusicDataCommand())
         println("KanadeBot initialized. ${CommandManager.getCommands().size} command(s) registered.")
     }
 
